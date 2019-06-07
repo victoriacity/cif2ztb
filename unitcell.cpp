@@ -4,9 +4,6 @@
 #include <cmath>
 #include "unitcell.h"
 
-#define PI 3.14159265
-#define RAD(x) (x*PI/180)
-
 void UnitCell::read_from_cif(string filename) {
   string line, token;
   ifstream file(filename);
@@ -77,7 +74,7 @@ void UnitCell::read_from_cif(string filename) {
                 atomtypes.push_back(str);
               atom_index.push_back(id);
             }
-            for (int ax = 0; ax < 2; ax++) {
+            for (int ax = 0; ax < 3; ax++) {
               if (i_col == axis_cols[ax])
                 coords[ax] = stof(str);
             }
@@ -106,6 +103,10 @@ void UnitCell::get_reduced_coordinates(vector<vec3> *dest_coordinates,
 }
 
 vec3 UnitCell::frac_to_abs(vec3 frac_vector) {
+  return frac_to_abs_static(frac_vector, cell_angle);
+}
+
+vec3 frac_to_abs_static(vec3 frac_vector, vec3 cell_angle) {
   float cos_alpha, cos_beta, cos_gamma, sin_gamma, c_y, c_z;
   cos_alpha = cos(RAD(cell_angle[0]));
   cos_beta = cos(RAD(cell_angle[1]));
@@ -124,9 +125,46 @@ vec3 UnitCell::frac_to_abs(vec3 frac_vector) {
   return abs_vector;
 }
 
+// Transformation matirx in upper triangular form, 6 non-zero elements
+float* UnitCell::transformation_matrix() {
+  float cos_alpha, cos_beta, cos_gamma, sin_gamma, c_y, c_z;
+  float* trig_mat = new float[9];
+  for (int i = 0; i <= 9; i++) trig_mat[i] = 0;
+  cos_alpha = cos(RAD(cell_angle[0]));
+  cos_beta = cos(RAD(cell_angle[1]));
+  cos_gamma = cos(RAD(cell_angle[2]));
+  sin_gamma = sin(RAD(cell_angle[2]));
+  c_y = cell_length[2] * (cos_alpha - cos_beta * cos_gamma) / sin_gamma;
+  c_z = cell_length[2] / sin_gamma * sqrt(
+          1 - cos_alpha * cos_alpha - cos_beta * cos_beta - cos_gamma * cos_gamma
+          + 2 * cos_alpha * cos_beta * cos_gamma
+        );
+  trig_mat[0] = cell_length[0];
+  trig_mat[1] = cell_length[1] * cos_gamma;
+  trig_mat[2] = cell_length[2] * cos_beta;
+  trig_mat[4] = cell_length[1] * sin_gamma;
+  trig_mat[5] = c_y;
+  trig_mat[8] = c_z;
+  return trig_mat;
+}
+
+
+// Invert an upper triangular matrix: [[a,b,c],[0,d,e],[0,0,f]]
+float* invert_upper_trig_matrix(float* mat) {
+  float* inv_mat = new float[9];
+  for (int i = 0; i <= 9; i++) inv_mat[i] = 0;
+  inv_mat[0] = 1 / mat[0];
+  inv_mat[1] = -mat[1] / mat[0] / mat[4];
+  inv_mat[2] = (mat[1] * mat[5] - mat[2] * mat[4]) / (mat[0] * mat[4] * mat[8]);
+  inv_mat[4] = 1 / mat[5];
+  inv_mat[5] = -mat[5] / mat[4] / mat[8];
+  inv_mat[8] = 1 / mat[8];
+  return inv_mat;
+}
+
 
 void UnitCell::get_all_coordinates(vector<vec3> *dest_coordinates, 
-          vector<int> *dest_atoms) {
+          vector<int> *dest_atoms, bool use_frac) {
   const float TOL = 0.0001;
   *dest_coordinates = coordinates;
   *dest_atoms = atom_index;
@@ -150,8 +188,41 @@ void UnitCell::get_all_coordinates(vector<vec3> *dest_coordinates,
         cache.push_back(new_coords);
       }
     }
-    
-  } 
+  }
+  if (!use_frac)
+    for (int i = 0; i < dest_coordinates->size(); i++) {
+      (*dest_coordinates)[i] = frac_to_abs((*dest_coordinates)[i] * cell_length);
+    }
+}
+
+void UnitCell::get_mimage_coordinates(vector<vec3> *dest_coordinates, 
+          vector<int> *dest_atoms, float rcut) {
+  int nx, ny, nz, size;
+  vec3 ex, ey, ez;
+  get_all_coordinates(dest_coordinates, dest_atoms, false);  
+  nx = rcut / cell_length[0] + 1;
+  ny = rcut / cell_length[1] + 1;
+  nz = rcut / cell_length[2] + 1;
+  ex = frac_to_abs(vec3(cell_length[0], 0, 0));
+  ey = frac_to_abs(vec3(0, cell_length[1], 0));
+  ez = frac_to_abs(vec3(0, 0, cell_length[2]));
+  size = dest_atoms->size();
+  for (int x = 0; x < size; x++) 
+    for (int i = -nx; i <= nx; i++)
+      for (int j = -ny; j <= ny; j++)
+        for (int k = -nz; k <= nz; k++)
+          if (i != 0 || j != 0 || k != 0) {
+            dest_coordinates->push_back((*dest_coordinates)[x] + i * ex + j * ey + k * ez);
+            dest_atoms->push_back((*dest_atoms)[x]);
+          }
+}
+
+float UnitCell::volume() {
+  vec3 ex, ey, ez;
+  ex = frac_to_abs(vec3(cell_length[0], 0, 0));
+  ey = frac_to_abs(vec3(0, cell_length[1], 0));
+  ez = frac_to_abs(vec3(0, 0, cell_length[2]));
+  return dot(ex, cross(ey, ez));
 }
 
 vector<SymmetryOperation> get_symmetry(ifstream &file) {
@@ -166,4 +237,9 @@ vector<SymmetryOperation> get_symmetry(ifstream &file) {
     symm_ops.push_back(cur_symm_op);
   }
   return symm_ops;
+}
+
+UnitCell duplicate(Unitcell cell, vec3 dup) {
+  Unitcell cell_duplicate;
+  cell_duplicate.cell_length = 
 }
