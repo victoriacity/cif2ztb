@@ -72,7 +72,7 @@ void UnitCell::read_from_cif(string filename) {
                 id++;
               if (id == atomtypes.size())
                 atomtypes.push_back(str);
-              atom_index.push_back(id);
+              reduced_atom_index.push_back(id);
             }
             for (int ax = 0; ax < 3; ax++) {
               if (i_col == axis_cols[ax])
@@ -84,7 +84,7 @@ void UnitCell::read_from_cif(string filename) {
             else
               has_next = false;
           }
-          coordinates.push_back(coords);
+          reduced_coordinates.push_back(coords);
         }
       }   
     }
@@ -92,14 +92,25 @@ void UnitCell::read_from_cif(string filename) {
     //cout << cell_angle[0] << '\t' << cell_angle[1] << '\t' << cell_angle[2] << '\n';
     //cout << axis_cols[0] << '\t' << axis_cols[1] << '\t' << axis_cols[2] << '\n';
     file.close();
+    calculate_all_coordinates();
   }
   else cout << "Unable to open file"; 
 }
 
 void UnitCell::get_reduced_coordinates(vector<vec3> *dest_coordinates, 
           vector<int> *dest_atoms) {
+  *dest_coordinates = reduced_coordinates;
+  *dest_atoms = reduced_atom_index;
+}
+
+void UnitCell::get_all_coordinates(vector<vec3> *dest_coordinates, 
+          vector<int> *dest_atoms, bool use_frac) {
   *dest_coordinates = coordinates;
   *dest_atoms = atom_index;
+  if (!use_frac)
+    for (int i = 0; i < dest_coordinates->size(); i++) {
+      (*dest_coordinates)[i] = frac_to_abs((*dest_coordinates)[i] * cell_length);
+    }
 }
 
 vec3 UnitCell::frac_to_abs(vec3 frac_vector) {
@@ -156,20 +167,19 @@ float* invert_upper_trig_matrix(float* mat) {
   inv_mat[0] = 1 / mat[0];
   inv_mat[1] = -mat[1] / mat[0] / mat[4];
   inv_mat[2] = (mat[1] * mat[5] - mat[2] * mat[4]) / (mat[0] * mat[4] * mat[8]);
-  inv_mat[4] = 1 / mat[5];
+  inv_mat[4] = 1 / mat[4];
   inv_mat[5] = -mat[5] / mat[4] / mat[8];
   inv_mat[8] = 1 / mat[8];
   return inv_mat;
 }
 
 
-void UnitCell::get_all_coordinates(vector<vec3> *dest_coordinates, 
-          vector<int> *dest_atoms, bool use_frac) {
+void UnitCell::calculate_all_coordinates() {
   const float TOL = 0.0001;
-  *dest_coordinates = coordinates;
-  *dest_atoms = atom_index;
-  for (int i = 0; i < atom_index.size(); i++) {
-    vec3 cur_coords = coordinates[i];
+  coordinates = reduced_coordinates;
+  atom_index = reduced_atom_index;
+  for (int i = 0; i < reduced_atom_index.size(); i++) {
+    vec3 cur_coords = reduced_coordinates[i];
     vector<vec3> cache;
     cache.push_back(cur_coords);
     for (SymmetryOperation symm : symmetry) {
@@ -183,18 +193,16 @@ void UnitCell::get_all_coordinates(vector<vec3> *dest_coordinates,
         }
       }
       if (is_new_position) {
-        dest_coordinates->push_back(new_coords);
-        dest_atoms->push_back(atom_index[i]);
+        coordinates.push_back(new_coords);
+        atom_index.push_back(reduced_atom_index[i]);
         cache.push_back(new_coords);
       }
     }
   }
-  if (!use_frac)
-    for (int i = 0; i < dest_coordinates->size(); i++) {
-      (*dest_coordinates)[i] = frac_to_abs((*dest_coordinates)[i] * cell_length);
-    }
 }
 
+// Do minimum image beforehand, do not fold coordinates
+// Does not work for ewald sum!
 void UnitCell::get_mimage_coordinates(vector<vec3> *dest_coordinates, 
           vector<int> *dest_atoms, float rcut) {
   int nx, ny, nz, size;
@@ -239,7 +247,19 @@ vector<SymmetryOperation> get_symmetry(ifstream &file) {
   return symm_ops;
 }
 
-UnitCell duplicate(Unitcell cell, vec3 dup) {
-  Unitcell cell_duplicate;
-  cell_duplicate.cell_length = 
+UnitCell UnitCell::duplicate(vec3 dup) {
+  int size;
+  UnitCell cell_duplicate;
+  cell_duplicate.cell_length = dup * cell_length;
+  cell_duplicate.cell_angle = cell_angle;
+  cell_duplicate.atomtypes = atomtypes;
+  size = atom_index.size();
+  for (int x = 0; x < size; x++) 
+    for (int i = 0; i < dup[0]; i++)
+      for (int j = 0; j < dup[1]; j++)
+        for (int k = 0; k < dup[2]; k++) {
+            cell_duplicate.coordinates.push_back((coordinates[x] + vec3(i, j, k)) / dup);
+            cell_duplicate.atom_index.push_back(atom_index[x]);
+        }
+  return cell_duplicate;
 }

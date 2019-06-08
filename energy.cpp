@@ -25,6 +25,10 @@ vec3 get_energy_terms(float r2, float rmin2, float rmax2, float k_ewald) {
     return tab;
 }
 
+// returns number of k vectors
+int get_kvectors(int* kvectors, float* kvector_norms, float* mat_inv, float alpha_2) {
+    return 0;
+}
 
 // evald summation from MCCCS-MN; returns electrostatic energy times unit cell volume
 float* ewald_sum(vec3 r, vec3* atoms_pos, int* atoms_label, int natoms, int atom_types, 
@@ -51,13 +55,8 @@ float* ewald_sum(vec3 r, vec3* atoms_pos, int* atoms_label, int natoms, int atom
                 if (hmax_2 - ki_2 > EPS) {
                     float sums[atom_types] = {0};
                     for (int z = 0; z < natoms; z++) {
-                        // Don't do minimum image for ewald sum
-                        if (atoms_pos[z][0] >= 0 && atoms_pos[z][0] < 20.09
-                            && atoms_pos[z][1] >= 0 && atoms_pos[z][1] < 19.738
-                            && atoms_pos[z][2] >= 0 && atoms_pos[z][2] < 13.142) {
-                            arg = dot(ki, r - atoms_pos[z]);
-                            sums[atoms_label[z]] += cos(arg);
-                        }
+                        arg = dot(ki, r - atoms_pos[z]);
+                        sums[atoms_label[z]] += cos(arg);
                     }
                     for (int z = 0; z < atom_types; z++) {
                         v_kspace[z] += sums[z] * exp(-ki_2 / (4 * alpha_2)) / ki_2;
@@ -106,22 +105,37 @@ void create_grid_pos(vec3* grid, float spacing, int dims[], bool use_fractional,
     }   
 }
 
+// Minimum image convention; box length should be larger than 2rcut
+vec3 fold_mimage(vec3 v, float* transform_mat, float* mat_inv) {
+    vec3 v_frac, v_folded;
+    for (int i = 0; i < 3; i++) {
+        v_frac[i] = mat_inv[3 * i] * v[0] + mat_inv[3 * i + 1] * v[1] + mat_inv[3 * i + 2] * v[2];
+        if (v_frac[i] <= -0.5) v_frac[i]++;
+        if (v_frac[i] > 0.5) v_frac[i]--;
+    }
+    for (int i = 0; i < 3; i++)
+        v_folded[i] = transform_mat[3 * i] * v_frac[0] 
+                        + transform_mat[3 * i + 1] * v_frac[1]
+                        + transform_mat[3 * i + 2] * v_frac[2];
+    return v_folded;
+}
 
 
 void calculate_grid(vec3** grid, uint32_t gridsize, 
                     vec3* atoms_pos, int* atom_labels, int natoms, int atom_types,
-                    float rmin, float rmax, float k_ewald,
+                    float rmin, float rmax, float k_ewald, bool fold,
                     float* transform_mat, float cell_vol) {
     uint32_t ind;
     float rmin2, rmax2, alpha_2;
     rmin2 = rmin * rmin;
     rmax2 = rmax * rmax;
-    float* mat_kspace;
-    int* kmax;
+    float *mat_inv, *mat_kspace;
+    int *kmax;
+    mat_inv = invert_upper_trig_matrix(transform_mat);
     if (k_ewald > 0) {
-        mat_kspace = invert_upper_trig_matrix(transform_mat);
         kmax = new int[3];
-        for (int i = 0; i < 9; i++) mat_kspace[i] *= 2 * PI;
+        mat_kspace = new float[9];
+        for (int i = 0; i < 9; i++) mat_kspace[i] = mat_inv[i] * 2 * PI;
         for (int i = 0; i < 3; i++) {
             kmax[i] = int(transform_mat[4 * i] * k_ewald) + 1;
             if (abs(transform_mat[1]) < EPS || abs(transform_mat[2]) < EPS 
@@ -130,12 +144,15 @@ void calculate_grid(vec3** grid, uint32_t gridsize,
         }
         alpha_2 = k_ewald * k_ewald;
     }
+
+    // Main loop
     for (ind = 0; ind < gridsize; ind++) {
         vec3 pos = grid[0][ind];
         for (int i = 0; i < atom_types; i++)
             grid[i][ind] = vec3(0, 0, 0);
         for (int j = 0; j < natoms; j++) {
             vec3 dr = pos - atoms_pos[j];
+            if (fold) dr = fold_mimage(dr, transform_mat, mat_inv);
             grid[atom_labels[j]][ind] += get_energy_terms(dr.squared_length(), rmin2, rmax2, k_ewald);      
         }
         if (k_ewald > 0) {
