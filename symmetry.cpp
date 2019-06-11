@@ -14,12 +14,15 @@ void SymmetryOperation::read_operation_expr(string str, int axis) {
         current_weight = -1;
         break;
       case 'x':
+        if (current_weight == 0) current_weight = 1;
         weight[3 * axis] = current_weight;
         break;
       case 'y':
+        if (current_weight == 0) current_weight = 1;
         weight[3 * axis + 1] = current_weight;
         break;
       case 'z':
+        if (current_weight == 0) current_weight = 1;
         weight[3 * axis + 2] = current_weight;
         break;
       case '/':

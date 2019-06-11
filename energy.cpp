@@ -26,21 +26,12 @@ vec3 get_energy_terms(float r2, float rmin2, float rmax2, float k_ewald) {
 }
 
 // returns number of k vectors
-int get_kvectors(int* kvectors, float* kvector_norms, float* mat_inv, float alpha_2) {
-    return 0;
-}
-
-// evald summation from MCCCS-MN; returns electrostatic energy times unit cell volume
-float* ewald_sum(vec3 r, vec3* atoms_pos, int* atoms_label, int natoms, int atom_types, 
-                float* mat_kspace, 
-                int kmax[], float alpha_2) {
+int get_kvectors(vec3* kvectors, float* norms, int kmax[], float* mat_inv, float alpha_2) {
+    int n_kvectors = 0;
     int kmin[3] = {0};
-    float hmax_2, ki_2, arg;
-    float* v_kspace = new float[atom_types];
-    for (int z = 0; z < atom_types; z++) v_kspace[z] = 0;
-    vec3* tab = new vec3[atom_types];
-    vec3 ki;
-    hmax_2 = 4 * PI * PI * alpha_2;
+    float hmax_2 = 4 * PI * PI * alpha_2;
+    float * mat_kspace = new float[9];
+    for (int i = 0; i < 9; i++) mat_kspace[i] = mat_inv[i] * 2 * PI;
     for (int l = 0; l <= kmax[0]; l++) {
         if (l == 0) kmin[1] = 0; else kmin[1] = -kmax[1];
         for (int m = kmin[1]; m <= kmax[1]; m++) {
@@ -52,18 +43,33 @@ float* ewald_sum(vec3 r, vec3* atoms_pos, int* atoms_label, int natoms, int atom
                     ki[z] = l * mat_kspace[z] + m * mat_kspace[3 + z] + n * mat_kspace[6 + z];
                 }
                 ki_2 = ki.squared_length();
-                if (hmax_2 - ki_2 > EPS) {
-                    float sums[atom_types] = {0};
-                    for (int z = 0; z < natoms; z++) {
-                        arg = dot(ki, r - atoms_pos[z]);
-                        sums[atoms_label[z]] += cos(arg);
-                    }
-                    for (int z = 0; z < atom_types; z++) {
-                        v_kspace[z] += sums[z] * exp(-ki_2 / (4 * alpha_2)) / ki_2;
-                        
-                    }
+                if (hmax_2 - ki_2 > EPS) { 
+                    kvectors[n_kvectors] = ki;
+                    norms[n_kvectors] = ki_2;
+                    n_kvectors++;
                 }
             }
+        }
+    }
+    return n_kvectors;
+}
+
+// evald summation from MCCCS-MN; returns electrostatic energy times unit cell volume
+float* ewald_sum(vec3 r, vec3* atoms_pos, int* atoms_label, int natoms, int atom_types, 
+                vec3* k_vectors, float* norms, int n_kvectors, float alpha_2) {
+    float arg;
+    float* v_kspace = new float[atom_types];
+    for (int z = 0; z < atom_types; z++) v_kspace[z] = 0;
+    vec3* tab = new vec3[atom_types];
+    for (int i = 0; i < n_kvectors; i++) {
+        float sums[atom_types] = {0};
+        for (int z = 0; z < natoms; z++) {
+            arg = dot(k_vectors[i], r - atoms_pos[z]);
+            sums[atoms_label[z]] += cos(arg);
+        }
+        for (int z = 0; z < atom_types; z++) {
+            v_kspace[z] += sums[z] * exp(-norms[i] / (4 * alpha_2)) / norms[i];
+            
         }
     }
     for (int z = 0; z < atom_types; z++) v_kspace[z] *= 8 * PI;
@@ -129,20 +135,26 @@ void calculate_grid(vec3** grid, uint32_t gridsize,
     float rmin2, rmax2, alpha_2;
     rmin2 = rmin * rmin;
     rmax2 = rmax * rmax;
-    float *mat_inv, *mat_kspace;
+
+    float *mat_inv, *norms;
+    vec3 *kvectors;
     int *kmax;
+    int n_kvectors = 1;
+
     mat_inv = invert_upper_trig_matrix(transform_mat);
     if (k_ewald > 0) {
         kmax = new int[3];
-        mat_kspace = new float[9];
-        for (int i = 0; i < 9; i++) mat_kspace[i] = mat_inv[i] * 2 * PI;
         for (int i = 0; i < 3; i++) {
             kmax[i] = int(transform_mat[4 * i] * k_ewald) + 1;
             if (abs(transform_mat[1]) < EPS || abs(transform_mat[2]) < EPS 
                 || abs(transform_mat[5] < EPS))
                 kmax[i]++;
+            n_kvectors *= 2 * kmax[i] + 1;
         }
         alpha_2 = k_ewald * k_ewald;
+        kvectors = new vec3[n_kvectors];
+        norms = new float[n_kvectors];
+        n_kvectors = get_kvectors(kvectors, norms, kmax, mat_inv, alpha_2);
     }
 
     // Main loop
@@ -157,7 +169,7 @@ void calculate_grid(vec3** grid, uint32_t gridsize,
         }
         if (k_ewald > 0) {
             float* ewald = ewald_sum(pos, atoms_pos, atom_labels, natoms, atom_types, 
-                            mat_kspace, kmax, alpha_2);
+                            kvectors, norms, n_kvectors, alpha_2);
             for (int i = 0; i < atom_types; i++)
                 grid[i][ind][2] += ewald[i] / cell_vol;
         }
