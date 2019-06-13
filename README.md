@@ -1,12 +1,23 @@
-# cif2ztb
-Tabulated zeolite potential
+# CIF2ZTB: Tabulated potential of material structures
 
-readcif: convert CIF file to cell info and coordinates
-* coordinates: uint8[] atom_id, float[] x_coord, float[] y_coord, float[] z_coord
-* cell info: float[3] cell_param, float[3] cell_angle
+A CUDA program to calculate tabulated potentials for adsorption simulation using an implicit rigid adsorbent material defined by its potential energy surface. Based on the Fortran code of MCCCS-MN and refactored in C++/CUDA.
 
-calc_energy: use CUDA to calculate tabulated energies
+## Compilation and usage
+Use `make` to compile the program. 
 
-write_h5: output tabulated potential to HDF5 file
+Usage: `cif2ztb input [-o output] [-s spacing] [-r rcut] [-k kewald] [-f | --fractional_basis]`
+* `input`: Path to input material structure in CIF format
+* `output`: Path to output tabulated potential file. Default: `zeolite.ztbx`
+* `spacing`: Grid spacing of the tabulate potential in angstroms.
+* `rcut`: Cutoff distance of non-bonding interactions. A larger rcut results in the unit cell being duplicated more times, thus also increasing the cost and accuracy of Ewald summation.
+* `kewald`: Ewald summation parameters. Default value is 3.2/rcut, use `-k 0` to turn off Ewald summation.
+* `f`: Use grid direction along fractional coordinate basis, has no effect if the material has a orthorombic/cubic unit cell.
 
-write_ztb: output tabulated potential to ZTB file
+## Output file format
+Line 1: Unit cell information, Number of grid points along each dimension (*N_a*, *N_b*, *N_c*) and cell angles in degree (*alpha*, *beta*, *gamma*).
+
+Line 2: Potential tabulation parameters: `spacing`, `rcut`, `kewald` and `--fractional_basis`.
+
+Line 3: Atom types included in the unit cell.
+
+Line 4 and after: values in tabulated potentials. Each line represents the linearized potential grid for an atom type and be reshaped into (*N_a*, *N_b*, *N_c*, 3).
