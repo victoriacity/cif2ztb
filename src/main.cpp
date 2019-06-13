@@ -22,7 +22,7 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("r,rcut", "Cutoff distance in angstroms", cxxopts::value<float>()->default_value("14.0"))
       ("k,kewald", "Ewald parameter, 0 for no Ewald summation, -1 for automatic", cxxopts::value<float>()->default_value("-1"))
       ("f,fractional_basis", "Create the tabulated potential using directions in fractional coordinates",
-        cxxopts::value<bool>())
+        cxxopts::value<bool>()->default_value("false"))
       ("h,help", "Print help")
     ;
 

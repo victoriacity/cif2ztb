@@ -9,9 +9,15 @@ void cif2ztb(string in_file, string out_file,
   
   int* dims;
   vec3 duplicates;
+  vec3 dim_mask[3] = {vec3(1, 0, 0), vec3(0, 1, 0), vec3(0, 0, 1)};
   gpuErrchk(cudaMallocManaged(&dims, 3 * sizeof(int)));
   for (int i = 0; i < 3; i++) {
-    dims[i] = (int) round(cell_min.cell_length[i] / spacing);
+    if (use_fractional_basis)
+      dims[i] = (int) round(cell_min.cell_length[i] / spacing);
+    else 
+      dims[i] = (int) round(
+        cell_min.frac_to_abs(cell_min.cell_length * dim_mask[i])[i] 
+          / spacing);
     duplicates[i] = (int) ceil(2 * rcut / cell_min.cell_length[i]);
   }
   cell = cell_min.duplicate(duplicates);
@@ -64,9 +70,13 @@ void cif2ztb(string in_file, string out_file,
 
   ofstream file;
   file.open(out_file);
-  
-  file << cell_min.cell_length << ' ' << cell_min.cell_angle << ' ' << spacing << endl;
-  file << rcut << ' ' << k_ewald << ' ' << (int) use_fractional_basis << endl;
+  file << dims[0] << ' ' << dims[1] << ' ' << dims[2];
+  file << ' ' << cell_min.cell_angle << ' ' << endl;
+  file << spacing << ' ' << rcut << ' ' << k_ewald << ' ' << (int) use_fractional_basis << endl;
+  for (string atom : cell.atomtypes) {
+    file << atom << ' ';
+  }
+  file << endl;
 
   for (int i = 0; i < atom_types; i++) {
     for (int j = 0; j < size; j++)
