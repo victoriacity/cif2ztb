@@ -14,7 +14,7 @@ Usage: `cif2ztb input [-o output] [-s spacing] [-r rcut] [-k kewald] [-f | --fra
 * `f`: Use grid direction along fractional coordinate basis, has no effect if the material has a orthorombic/cubic unit cell.
 
 ## Output file format
-Line 1: Unit cell information, cell lengths in angstroms (*a*, *b*, *c*) and cell angles in degree (*alpha*, *beta*, *gamma*).
+Line 1: Unit cell information, Number of grid points along each dimension (*N_a*, *N_b*, *N_c*) and cell angles in degree (*alpha*, *beta*, *gamma*).
 
 Line 2: Potential tabulation parameters: `spacing`, `rcut`, `kewald` and `--fractional_basis`.
 
