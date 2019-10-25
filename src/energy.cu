@@ -11,9 +11,6 @@ __device__ const int MAX_ATOMS = 32;
 
 
 __device__ vec3 get_energy_terms(float r2, float rmin2, float rmax2, float k_ewald) {
-    vec3 overlap(1e20, 1e20, 1e20);
-    if (r2 < rmin2) 
-        return overlap;
     vec3 tab(0, 0, 0); 
     if (r2 < rmax2) {
         float r = sqrt(r2);
@@ -141,7 +138,7 @@ void index_1d(int* ijk, uint32_t index_3d, int* dims) {
 }
 
 __global__
-void create_grid_pos(vec3* grid, float spacing, int* dims, bool use_fractional, 
+void create_grid_pos(vec3* grid, vec3 spacing, int* dims, bool use_fractional, 
                           vec3 cell_angle) {
     int ijk[3];
     uint32_t ind_init = blockIdx.x * blockDim.x + threadIdx.x;
@@ -150,7 +147,7 @@ void create_grid_pos(vec3* grid, float spacing, int* dims, bool use_fractional,
         //printf("%d\n", ind);
         index_1d(ijk, ind, dims);
         for (int z = 0; z < 3; z++)
-            grid[ind][z] = spacing * ijk[z];
+            grid[ind][z] = spacing[z] * ijk[z];
         if (use_fractional)
             grid[ind] = frac_to_abs_static_cu(grid[ind], cell_angle);
     }
@@ -181,6 +178,7 @@ void calculate_grid(vec3* grid, uint32_t gridsize,
                     float k_ewald, int n_kvectors, vec3* kvectors, float* norms, float cell_vol) {
     float rmin2, rmax2, alpha_2;
     float ewald[MAX_ATOMS];
+    vec3 overlap(1e20, 1e20, 1e20);
     rmin2 = rmin * rmin;
     rmax2 = rmax * rmax;
     alpha_2 = k_ewald * k_ewald;
@@ -197,10 +195,18 @@ void calculate_grid(vec3* grid, uint32_t gridsize,
         for (int j = 0; j < natoms; j++) {
             vec3 dr = pos - atoms_pos[j];
             if (fold) dr = fold_mimage(dr, transform_mat, mat_inv);
-            grid[atom_labels[j] * gridsize + ind] += get_energy_terms(dr.squared_length(), rmin2, rmax2, k_ewald);
+            // process overlap here, if overlap does not consider any extra atom at all
+            // to be consistent with MCCCS-MN
+            float r2 = dr.squared_length();
+            if (r2 < rmin2) {
+                for (int i = 0; i < atom_types; i++) grid[i * gridsize + ind] = overlap;
+                break;
+            }
+            grid[atom_labels[j] * gridsize + ind] += get_energy_terms(r2, rmin2, rmax2, k_ewald);
             
         } 
-        if (k_ewald > 0) {
+        if (k_ewald > 0 and !(grid[gridsize + ind][0] == overlap[0] 
+                && grid[gridsize + ind][1] == overlap[1] && grid[gridsize + ind][2] == overlap[2])) {
             ewald_sum(ewald, pos, atoms_pos, atom_labels, natoms, atom_types, 
                             kvectors, norms, n_kvectors, alpha_2);
             for (int i = 0; i < atom_types; i++)

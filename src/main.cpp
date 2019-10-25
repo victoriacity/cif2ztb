@@ -4,7 +4,7 @@
 using namespace std;
 
 void cif2ztb(string in_file, string out_file, 
-             float rcut, float k_ewald, float spacing, bool use_fractional_basis);
+             float rcut, float k_ewald, float spacing, bool use_fractional_basis, bool out_binary);
 
 cxxopts::ParseResult parse(int argc, char* argv[]) {
   try {
@@ -22,6 +22,8 @@ cxxopts::ParseResult parse(int argc, char* argv[]) {
       ("r,rcut", "Cutoff distance in angstroms", cxxopts::value<float>()->default_value("14.0"))
       ("k,kewald", "Ewald parameter, 0 for no Ewald summation, -1 for automatic", cxxopts::value<float>()->default_value("-1"))
       ("f,fractional_basis", "Create the tabulated potential using directions in fractional coordinates",
+        cxxopts::value<bool>()->default_value("false"))
+      ("b,output_binary", "Outputs a binary file instead of CSV to be read by MCCCS-MN, overrides -f to be True",
         cxxopts::value<bool>()->default_value("false"))
       ("h,help", "Print help")
     ;
@@ -57,7 +59,7 @@ int main(int argc, char* argv[]) {
   kewald = result["kewald"].as<float>();
   if (kewald == -1) kewald = 3.2 / rcut;
   
-  cif2ztb(in_file, out_file, rcut, kewald, spacing, result["fractional_basis"].as<bool>());
+  cif2ztb(in_file, out_file, rcut, kewald, spacing, result["fractional_basis"].as<bool>(), result["output_binary"].as<bool>());
   cout << "Finished potential energy tabulation." << endl;
 
   return 0;

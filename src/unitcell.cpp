@@ -76,7 +76,9 @@ void UnitCell::read_from_cif(string filename) {
             }
             for (int ax = 0; ax < 3; ax++) {
               if (i_col == axis_cols[ax])
+               // always wrap coordinates between [0, 1)
                 coords[ax] = stof(str);
+                if (coords[ax] < 0) coords[ax] += 1;
             }
             i_col++;
             if (ss >> str) 
@@ -175,7 +177,6 @@ float* invert_upper_trig_matrix(float* mat) {
 
 
 void UnitCell::calculate_all_coordinates() {
-  const float TOL = 0.0001;
   coordinates = reduced_coordinates;
   atom_index = reduced_atom_index;
   for (int i = 0; i < reduced_atom_index.size(); i++) {
@@ -187,7 +188,7 @@ void UnitCell::calculate_all_coordinates() {
       vec3 new_coords = symm.apply(cur_coords); 
       for (vec3 existing_coords : cache) {
          vec3 diff = new_coords - existing_coords;
-         if (diff.squared_length() < TOL * TOL) {
+         if (diff.squared_length() < CELL_TOL * CELL_TOL) {
           is_new_position = false;
           break;
         }

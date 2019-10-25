@@ -6,6 +6,8 @@
 
 using namespace std;
 
+const float CELL_TOL = 1e-5;
+
 class SymmetryOperation {
     int weight[9] = {0};
     float bias[3] = {0.0};

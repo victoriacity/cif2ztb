@@ -7,7 +7,7 @@
 #include "vec3.h"
 #include "symmetry.h"
 
-#define PI 3.14159265
+#define PI 3.1415926535897932384626433832795028841971693993751058209749
 #define RAD(x) (x*PI/180)
 
 using namespace std;
