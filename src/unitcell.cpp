@@ -188,6 +188,14 @@ void UnitCell::calculate_all_coordinates() {
       vec3 new_coords = symm.apply(cur_coords); 
       for (vec3 existing_coords : cache) {
          vec3 diff = new_coords - existing_coords;
+         for (int j = 0; j < 3; j++) {
+           // minimum image convention
+            if (diff[j] > 0.5) {
+              diff[j] -= 1;
+            } else if (diff[j] <= -0.5) {
+              diff[j] += 1;
+            }
+          } 
          if (diff.squared_length() < CELL_TOL * CELL_TOL) {
           is_new_position = false;
           break;

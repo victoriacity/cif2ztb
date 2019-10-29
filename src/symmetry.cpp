@@ -71,9 +71,6 @@ vec3 SymmetryOperation::apply(vec3 coords) {
     }
     while (new_coords[i] < 0) new_coords[i]++;
     while (new_coords[i] >= 1) new_coords[i]--;
-    if (new_coords[i] >= 1 - CELL_TOL) new_coords[i] = 0;
-    if (new_coords[i] < 0 || new_coords[i] > 1) 
-        cout << "Invalid fractional coordinates: " << new_coords[i] << endl;
   }
   return new_coords;
 } 
