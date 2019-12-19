@@ -1,6 +1,6 @@
 # CIF2ZTB: Tabulated potential of material structures
 
-A CUDA program to calculate tabulated potentials for adsorption simulation using an implicit rigid adsorbent material defined by its potential energy surface. Based on the Fortran code of MCCCS-MN and refactored in C++/CUDA.
+A CUDA program to calculate tabulated potentials for adsorption simulation using an implicit rigid adsorbent material defined by its potential energy surface. Based on the Fortran code of [MCCCS-MN](https://github.com/SiepmannGroup/VLE-Validation/tree/master/MCCCS-MN) and refactored in C++/CUDA.
 
 ## Compilation and usage
 Use `make` to compile the program. 
